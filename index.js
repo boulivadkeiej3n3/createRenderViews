@@ -1,21 +1,41 @@
 /***********************************/
 const Puppeteer        = require("puppeteer");
-const Axios            = require("axios");
+const randomUserAgent  = require("random-useragent");
 const Mongoose         = require("mongoose");
-
 const PingServer       = `https://host-router.onrender.com/`;
 const ServersDB = Mongoose.model(`RenderServers`, new Mongoose.Schema({url:String}));
+const RenderAccountsDB = Mongoose.model(`renderaccounts`, new Mongoose.Schema({url:String}));
 const AccountPassword  = `123RENDER.com`;
 const PuppeteerOptions = {headless:true, args:["--no-sandbox"]}
-const PublicRepoID     = `https://github.com/boulivadkeiej3n3/puppeteer-worker/;
+const PublicRepoID     = `https://github.com/boulivadkeiej3n3/puppeteerworker-1`;
 let RenderBrowser;
 let RenderPage;
-const asyncSetTimeout = async(duration)=>{await new Promise((resolve)=> setTimeout(resolve, duration))}
-/***********************************/
-Mongoose.connect(`mongodb+srv://maximous:123MONGODB.com@m001.cmsqx.mongodb.net/?retryWrites=true&w=majority`).then((connection)=>{
-connection ? console.log(`Database Connected!`): console.log(`Error Occured during connection to database`);
-})
 
+const CommonRenderAccountPassword = `123RENDER.com`;
+const asyncSetTimeout = async(duration)=>{await new Promise((resolve)=> setTimeout(resolve, duration))}
+
+Mongoose.connect(`mongodb+srv://maximous:123MONGODB.com@m001.cmsqx.mongodb.net/?retryWrites=true&w=majority`).then((connection)=>{
+connection ? console.log(`Database Connected!`): console.log(`Error Occured during connection to database`)})
+/********
+ * 1 - connect renderAccounts database
+ * DO
+ *  2 - find the index that has less than 750 accounts in RenderAccounts Database
+ *  3 - login to this account
+ *   DO
+ *    4 - create a new services
+ *    5 - update the render accounts count
+ *   REPEAT
+ * 6 - when the accounts has already reached 750, log out
+ * REPEAT 
+ */
+
+
+async function elementExists(page,selectorString){
+    console.log(selectorString)
+return await page.evaluate(()=>{
+   return (document.querySelector(selectorString))?true:false
+},selectorString)
+}
 
 function generateRandomName(){
 const characters = [`A`,`B`,`C`,`D`,`E`,`F`,`G`,`H`,`I`,`J`,`K`,`L`,`M`,`N`,`P`,`Q`,`R`,`S`,`T`,`U`,`V`,`X`,`Z`,
@@ -28,7 +48,10 @@ hash+=characters[Math.floor(Math.random() *(characters.length - 0 +1))];
 return hash;
 
 }
-async function remixProject(index){
+async function remixProject(account){
+// If it didnt login in and the login page still exists: login again:
+if(await RenderPage.$(`[name="email"]`)){await LoginAccount(account)}
+
     console.log(`[PUPPETEER INFO]: Project started remixing..`)
 //PATH FOR CREATING A NEW SERVICE:https://dashboard.render.com/select-repo?type=web
 //Public repo input field: input[data-testid="public-git-repo-url-input"]
@@ -65,75 +88,66 @@ const ProjectURL = (await RenderPage.evaluate(()=> document.querySelector(`div.h
 await (new ServersDB({url:ProjectURL})).save()
 return ProjectURL;
 }
-async function createAccount(EmailString){
-  let accountsCreated = [];
-    console.log(`[PUPPETEER INFO]: Account creation started..`)
- /** REGESTIRING A NEW ACCOUNT */
-   await (await RenderPage.waitForSelector(`input[name="email"]`)).type(EmailString);
-   await (await RenderPage.waitForSelector(`input[name="password"]`)).type(AccountPassword);
-   await (await RenderPage.waitForSelector(`button[type="submit"]`)).click();
-   console.log(`[PUPPETEER INFO]: "Submit" Account Button clicked..`)
 
- //Retreieving Confirmation code:
- let Messages;
- let MessagesWaiterCounter =0;
- do{
-  await asyncSetTimeout(10000);
-  console.log(`https://www.1secmail.com/api/v1/?action=getMessages&login=${EmailString.match(/.+(?=@)/)}&domain=${EmailString.match(/(?<=@).+/)}`)
-   Messages =(await Axios.get(`https://www.1secmail.com/api/v1/?action=getMessages&login=${EmailString.match(/.+(?=@)/)}&domain=${EmailString.match(/(?<=@).+/)}`)).data;
-   MessagesWaiterCounter++;
-   console.log(MessagesWaiterCounter)
-
-   //If messages don't arrive that means that the email is broken and should be changed:
-   if(MessagesWaiterCounter > 2){ await RenderBrowser.close();return 0;}
-
-  }
-  while(Messages.length == 0);
-
- for(const Message of Messages){
-      if(Message.subject.match(/render/i)){
-        const formattedMailContent = (await Axios.get(`https://www.1secmail.com/api/v1/?action=readMessage&login=${EmailString.match(/.+(?=@)/)}&domain=${EmailString.match(/(?<=@).+/)}&id=${Message.id}`)).data.body.match(/http.+/ig)[0];
-        console.log(formattedMailContent)
-         await RenderPage.goto(formattedMailContent);
-         //Remix projects 10 times:
-       for (let projectsCount =0; projectsCount <12; projectsCount++){
-        // Create a new project and send it to the ping server to create a new account to be pinged:
-             try{
-			 accountsCreated.push(await remixProject(projectsCount));
-             }catch(e){console.log(`ERROR REMIXING: ${e.message}`);  accountsCreated.push(await remixProject(projectsCount));}
-
-        }
-	  }
-      await Axios.post(`${PingServer}/pingPost`,{servers: accountsCreated});
-      console.log(`SERVERS CREATED AND SENT TO BE HANDLED`)
-      await RenderBrowser.close();
-
-}
-
-
+async function LoginAccount(accontEmail){
+  
+  await (await RenderPage.waitForSelector(`[name="email"]`)).type(accontEmail);
+  await (await RenderPage.waitForSelector(`[name="password"]`)).type(CommonRenderAccountPassword);
+  await (await RenderPage.waitForSelector(`[type="submit"]`)).click();
+  
+  return 0;
 }
 async function main(){
-    Emails      =(await Axios.get("https://www.1secmail.com/api/v1/?action=genRandomMailbox&count=2000")).data;
- 
+ /*     RenderAccountsDB.findOne({account:"aashay.sina@falltrack.net"}).then((doc)=>{
+      doc._doc.accountCounts++;
+      doc.markModified("accountCounts")
+      doc.save().then((doc)=> console.log(doc));   
+    }) */
 
-  for (const EmailField of Emails){
-   try{
-    RenderBrowser =(await Puppeteer.launch(PuppeteerOptions));
-    RenderPage    =(await RenderBrowser.pages())[0];
-	// Block images and css and fonts from downloading for speed increase
-	 await RenderPage.setRequestInterception(true);
-     RenderPage.on('request', (req) => {
-      if(/*req.resourceType() == 'stylesheet' || */req.resourceType() == 'font' || req.resourceType() == 'image'){
-      req.abort();
-      }else{
-		  req.continue();
-	  }
-	 })
 	/*********************************************/
-    await RenderPage.goto(`https://dashboard.render.com/register?next=/?register`);
-    await createAccount(EmailField);
-   }catch(e){console.log(`[ERROR]:  Error while creating a new account\n${e.message}`); await RenderPage.close()}
+    // Find the accounts that has less than 750 accounts:
+    while(true){
+        try{
+            RenderBrowser =(await Puppeteer.launch(PuppeteerOptions));
+            RenderPage    =(await RenderBrowser.pages())[0];
+            RenderPage.setUserAgent(randomUserAgent.getRandom())
+            // Block images and css and fonts from downloading for speed increase
+             await RenderPage.setRequestInterception(true);
+             RenderPage.on('request', (req) => {
+              if(/*req.resourceType() == 'stylesheet' ||*/ req.resourceType() == 'font' || req.resourceType() == 'image'){
+              req.abort();
+              }else{
+                  req.continue();
+              }
+              
+             })}catch(e){console.log(`[ERROR]:  Error while creating a new account\n${e.message}`)}
+            
+    RenderAccountsDB.findOne({accountCounts: {$lt:740}},{_id:0},async (err,accountDoc)=>{
+        //if there's a no empty account left, return
+       // if(err){console.log(err.message); RenderBrowser.close(); return} 
+        console.dir(accountDoc._doc.account);
 
-  }
+        await RenderPage.goto(`https://dashboard.render.com/signin`);
+
+        await LoginAccount(accountDoc._doc.account);
+        await asyncSetTimeout(5000)
+        //Create 30 services and return then logout:
+          for (let index=0; index <5; index++){
+            try{
+        await remixProject(accountDoc._doc.account)
+       await  RenderAccountsDB.findOne({account:"aashay.sina@falltrack.net"}).then(async (doc)=>{
+       doc._doc.accountCounts++;
+        doc.markModified("accountCounts")
+       await  doc.save()
+       console.log(doc);   
+    })
+            }catch(e){console.log(`EROR REMIXING: ${e.message}`);}
+        }
+
+     })
+     //RenderBrowser.close()
+     return
+    }
+   
 }main();
 
