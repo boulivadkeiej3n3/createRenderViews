@@ -1,0 +1,17 @@
+{
+  "name": "createrenderviewer",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+     "start":"node index.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "mongoose": "^6.8.0",
+    "puppeteer": "^19.3.0",
+    "random-useragent": "^0.5.0"
+  }
+}
